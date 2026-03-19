@@ -314,6 +314,7 @@ in
       dune_2 = natocamlPackages.dune;
       dune_3 = natocamlPackages.dune;
       dune = natocamlPackages.dune;
+
       ocamlbuild = natocamlPackages.ocamlbuild;
       opaline = natocamlPackages.opaline;
 
@@ -385,6 +386,39 @@ in
       natocamlPackages = getNativeOCamlPackages osuper;
     in
     {
+      dune_target =
+        assert stdenv.hostPlatform.isMinGW -> lib.versionAtLeast osuper.ocaml.version "5.4";
+        let
+          installedName = if stdenv.hostPlatform.isMinGW then "dune.exe" else "dune";
+        in
+        osuper.dune_target.overrideAttrs (o: {
+          dontAddPrefix = true;
+          dontFixup = true;
+
+          # Native gcc must be in depsBuildBuild ONLY (not nativeBuildInputs)
+          # so it serves the BUILD role. BUILD role reads
+          # NIX_CFLAGS_COMPILE_FOR_BUILD / NIX_LDFLAGS_FOR_BUILD (clean, no
+          # cross paths). If also in nativeBuildInputs (HOST role), it would
+          # additionally read NIX_CFLAGS_COMPILE / NIX_LDFLAGS which contain
+          # cross paths from buildInputs, causing native compilation to find
+          # cross-target headers/libraries.
+          depsBuildBuild = [ buildPackages.stdenv.cc ];
+          nativeBuildInputs = lib.remove buildPackages.stdenv.cc (o.nativeBuildInputs or [ ]);
+
+          buildPhase = ''
+            runHook preBuild
+            dune build -x ${crossName} ''${enableParallelBuilding:+-j $NIX_BUILD_CORES} bin/main.exe
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/bin
+            cp _build/default.${crossName}/bin/main.exe $out/bin/${installedName}
+            runHook postInstall
+          '';
+        });
+
       camlzip = osuper.camlzip.overrideAttrs (_: {
         OCAMLFIND_TOOLCHAIN = "${crossName}";
         preInstall = ''

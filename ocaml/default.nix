@@ -755,6 +755,22 @@ with oself;
           "";
     });
 
+  # Template for cross-compilation only — not buildable natively (pname
+  # "dune_target" does not match any dune package). The cross overlay's
+  # fixOCamlPackage uses this to generate findlib conf with paths for these
+  # deps, and overlay 2 overrides build/install phases entirely.
+  dune_target = buildDunePackage {
+    pname = "dune_target";
+    inherit (dune_3) version src;
+    buildInputs = [
+      csexp
+      pp
+      re
+      spawn
+      uutf
+    ];
+  };
+
   dune-action-trace = buildDunePackage {
     pname = "dune-action-trace";
     inherit (dune_3) src version;
