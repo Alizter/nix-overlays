@@ -71,19 +71,23 @@ in
         if p ? pname then
           let
             pname = p.pname or (throw "`p.pname' not found: ${p.name}");
+            prefix1 = "ocaml${osuper.ocaml.version}-";
+            prefix2 = "ocaml-";
+            # For packages like ocaml-lsp-server, try stripping -server suffix
+            withoutServer = lib.removeSuffix "-server" pname;
           in
           natocamlPackages."${pname}" or
           # Some legacy packages are called `ocaml_X`, e.g. extlib and
           # sqlite3
-          natocamlPackages."ocaml_${pname}" or (
-            let
-              prefix1 = "ocaml${osuper.ocaml.version}-";
-              prefix2 = "ocaml-";
-            in
+          natocamlPackages."ocaml_${pname}" or
+          # Try without -server suffix (e.g., ocaml-lsp-server -> ocaml-lsp)
+          natocamlPackages."${withoutServer}" or (
             if lib.hasPrefix prefix1 p.pname then
               natocamlPackages."${(lib.removePrefix prefix1 pname)}"
             else if lib.hasPrefix prefix2 p.pname then
-              natocamlPackages."${(lib.removePrefix prefix2 pname)}"
+              natocamlPackages."${(lib.removePrefix prefix2 pname)}" or
+              # Also try the stripped version without ocaml- prefix
+              natocamlPackages."${(lib.removePrefix prefix2 withoutServer)}"
             else
               throw "Unsupported cross-pkg parsing for `${p.pname}'"
           )
@@ -418,6 +422,14 @@ in
           "LIBDIR=$(OCAMLFIND_DESTDIR)/${o.pname}"
           "DOCDIR=$(out)/share/doc/${o.pname}"
         ];
+
+        # For mingw: the binary is cmdliner.exe but install looks for cmdliner
+        # Create a symlink to fix the install, or just skip the binary
+        preInstall = lib.optionalString stdenv.hostPlatform.isMinGW ''
+          if [ -f _build/src/tool/cmdliner.exe ]; then
+            ln -sf cmdliner.exe _build/src/tool/cmdliner
+          fi
+        '';
 
         postInstall = ''
           mv $OCAMLFIND_DESTDIR/${o.pname}/{opam,${o.pname}.opam}
