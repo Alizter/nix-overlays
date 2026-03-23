@@ -159,9 +159,22 @@ in
 
       fixOCamlPackage =
         b:
-        b.overrideAttrs (o: {
-          OCAMLFIND_CONF = makeFindlibConf (findNativePackage b) b;
-        });
+        b.overrideAttrs (
+          o:
+          {
+            OCAMLFIND_CONF = makeFindlibConf (findNativePackage b) b;
+          }
+          // lib.optionalAttrs stdenv.hostPlatform.isMinGW {
+            # Remove makeWrapper - shell wrappers don't work on Windows
+            nativeBuildInputs = lib.filter (p: !(p ? pname && p.pname == "make-shell-wrapper-hook")) (
+              o.nativeBuildInputs or [ ]
+            );
+            # Clear postInstall if it uses wrapProgram (common pattern)
+            postInstall = lib.optionalString (!(lib.hasInfix "wrapProgram" (o.postInstall or ""))) (
+              o.postInstall or ""
+            );
+          }
+        );
     in
 
     (lib.mapAttrs (_: p: if p ? overrideAttrs then fixOCamlPackage p else p) osuper)
